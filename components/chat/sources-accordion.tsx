@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import type { Source } from "@/lib/types";
+import { useT } from "@/lib/store";
 
 type SourcesAccordionProps = {
   sources: Source[];
@@ -21,6 +22,7 @@ type SourcesAccordionProps = {
  */
 export function SourcesAccordion({ sources }: SourcesAccordionProps) {
   const [open, setOpen] = useState(false);
+  const t = useT();
 
   if (!sources || sources.length === 0) return null;
 
@@ -39,9 +41,7 @@ export function SourcesAccordion({ sources }: SourcesAccordionProps) {
             open && "rotate-180",
           )}
         />
-        <span>
-          {sources.length} Kaynak{sources.length > 1 ? "" : ""}
-        </span>
+        <span>{t.sourcesLabel(sources.length)}</span>
       </CollapsibleTrigger>
 
       <CollapsibleContent className="mt-2">
@@ -79,7 +79,7 @@ export function SourcesAccordion({ sources }: SourcesAccordionProps) {
                     {source.url}
                   </p>
                   <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground/80">
-                    İlgili skor: {(source.relevance_score * 100).toFixed(0)}%
+                    {t.relevanceScore}: {(source.relevance_score * 100).toFixed(0)}%
                   </p>
                 </div>
               </a>

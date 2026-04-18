@@ -5,7 +5,7 @@ import { Header } from "@/components/header";
 import { MessageList } from "./message-list";
 import { InputBar } from "./input-bar";
 import { EmptyState } from "./empty-state";
-import { useChatStore } from "@/lib/store";
+import { useChatStore, useT } from "@/lib/store";
 import { chat as chatApi, ApiError } from "@/lib/api";
 
 /**
@@ -25,6 +25,7 @@ export function ChatContainer() {
   const addMessage = useChatStore((s) => s.addMessage);
   const setLoading = useChatStore((s) => s.setLoading);
   const setError = useChatStore((s) => s.setError);
+  const t = useT();
 
   // Yeni eklenen son mesajın id'si — typewriter buna göre çalışır
   const [latestId, setLatestId] = useState<string | undefined>();
@@ -57,9 +58,7 @@ export function ChatContainer() {
       setLatestId(newMsg.id);
     } catch (err) {
       const errorMessage =
-        err instanceof ApiError
-          ? err.message
-          : "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.";
+        err instanceof ApiError ? err.message : t.errorUnexpected;
 
       const newMsg = addMessage({
         role: "assistant",

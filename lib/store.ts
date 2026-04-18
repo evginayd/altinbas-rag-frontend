@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Message } from "./types";
+import type { Language } from "./i18n";
+import { translations } from "./i18n";
 
 /**
  * Chat store.
@@ -14,11 +16,13 @@ type ChatStore = {
   messages: Message[];
   isLoading: boolean;
   error: string | null;
+  language: Language;
 
   addMessage: (msg: Omit<Message, "id" | "timestamp">) => Message;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   clearMessages: () => void;
+  setLanguage: (lang: Language) => void;
 };
 
 const createId = () =>
@@ -32,6 +36,7 @@ export const useChatStore = create<ChatStore>()(
       messages: [],
       isLoading: false,
       error: null,
+      language: "tr" as Language,
 
       addMessage: (msg) => {
         const fullMessage: Message = {
@@ -47,12 +52,25 @@ export const useChatStore = create<ChatStore>()(
       setError: (error) => set({ error }),
 
       clearMessages: () => set({ messages: [], error: null, isLoading: false }),
+      setLanguage: (lang) => set({ language: lang }),
     }),
     {
       name: "altinbas-chat-store",
       storage: createJSONStorage(() => localStorage),
-      // Sadece messages persist edilir, isLoading/error oturum bağımlı
-      partialize: (state) => ({ messages: state.messages }),
+      // messages + language persist edilir, isLoading/error oturum bağımlı
+      partialize: (state) => ({
+        messages: state.messages,
+        language: state.language,
+      }),
     },
   ),
 );
+
+/**
+ * UI string'leri için kolay erişim hook'u.
+ * Kullanım: const t = useT(); t.welcomeGreeting
+ */
+export const useT = () => {
+  const language = useChatStore((s) => s.language);
+  return translations[language];
+};

@@ -1,4 +1,23 @@
 import type { ChatResponse, Message } from "./types";
+import { translations, type Language } from "./i18n";
+
+/**
+ * Store React hook'u burada kullanılamaz (api.ts komponent değil). Hata
+ * mesajlarını lokalize etmek için localStorage'daki persist verisinden
+ * dil tercihini okuruz. Hata olursa varsayılan "tr".
+ */
+function getLang(): Language {
+  if (typeof window === "undefined") return "tr";
+  try {
+    const raw = localStorage.getItem("altinbas-chat-store");
+    if (!raw) return "tr";
+    const parsed = JSON.parse(raw);
+    const lang = parsed?.state?.language;
+    return lang === "en" ? "en" : "tr";
+  } catch {
+    return "tr";
+  }
+}
 
 /**
  * Backend API client.
@@ -39,10 +58,9 @@ export async function chat(
   query: string,
   history: Message[] = [],
 ): Promise<ChatResponse> {
+  const t = translations[getLang()];
   if (!API_URL) {
-    throw new ApiError(
-      "API URL tanımlı değil. NEXT_PUBLIC_API_URL ortam değişkenini ayarlayın.",
-    );
+    throw new ApiError(t.errorApiUrl);
   }
 
   // Son 6 mesajla sınırla (3 turn). Token maliyeti için bu yeterli,
@@ -60,9 +78,7 @@ export async function chat(
       body: JSON.stringify({ query, history: recentHistory }),
     });
   } catch (err) {
-    throw new ApiError(
-      "Sunucuya bağlanılamadı. İnternet bağlantınızı kontrol edin.",
-    );
+    throw new ApiError(t.errorConnection);
   }
 
   if (!response.ok) {

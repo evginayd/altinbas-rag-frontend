@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, KeyboardEvent } from "react";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/store";
 
 type InputBarProps = {
   onSend: (text: string) => void;
@@ -27,6 +28,7 @@ export function InputBar({
 }: InputBarProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const t = useT();
 
   // Dış kontrolden değer geldiğinde set et + focus
   useEffect(() => {
@@ -74,7 +76,7 @@ export function InputBar({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Altınbaş Üniversitesi hakkında soru sor..."
+            placeholder={t.inputPlaceholder}
             rows={1}
             disabled={disabled}
             className={cn(
@@ -89,13 +91,13 @@ export function InputBar({
             disabled={disabled || !value.trim()}
             size="icon"
             className="h-9 w-9 shrink-0 rounded-xl"
-            aria-label="Gönder"
+            aria-label={t.sendLabel}
           >
             <Send className="h-4 w-4" />
           </Button>
         </div>
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
-          AI asistan hata yapabilir. Önemli bilgileri doğrulayın.
+          {t.disclaimerText}
         </p>
       </div>
     </div>

@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useChatStore } from "@/lib/store";
+import { useChatStore, useT } from "@/lib/store";
 
 /**
  * "Yeni Sohbet" butonu.
@@ -24,6 +24,7 @@ export function NewChatButton() {
   const [open, setOpen] = useState(false);
   const messages = useChatStore((s) => s.messages);
   const clearMessages = useChatStore((s) => s.clearMessages);
+  const t = useT();
 
   const hasMessages = messages.length > 0;
 
@@ -47,22 +48,22 @@ export function NewChatButton() {
         className="rounded-full gap-1.5"
       >
         <Plus className="h-4 w-4" />
-        <span className="hidden sm:inline">Yeni Sohbet</span>
+        <span className="hidden sm:inline">{t.newChat}</span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Yeni sohbet başlatılsın mı?</DialogTitle>
+            <DialogTitle>{t.newChatDialogTitle}</DialogTitle>
             <DialogDescription>
-              Mevcut konuşma silinecek. Bu işlem geri alınamaz.
+              {t.newChatDialogDescription}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>
-              Vazgeç
+              {t.cancel}
             </Button>
-            <Button onClick={handleClear}>Yeni Sohbet Başlat</Button>
+            <Button onClick={handleClear}>{t.confirmNewChat}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
