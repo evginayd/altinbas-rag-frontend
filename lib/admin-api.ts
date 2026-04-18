@@ -32,6 +32,15 @@ export type AdminUrlItem = {
 export type AdminUrlsResponse = {
   urls: AdminUrlItem[];
   total: number;
+  offset: number;
+  limit: number;
+};
+
+export type ListUrlsOptions = {
+  offset?: number;
+  limit?: number;
+  type?: "web" | "pdf" | null;
+  search?: string;
 };
 
 export type IngestStatus = "inserted" | "updated" | "skipped" | "failed";
@@ -154,8 +163,17 @@ export async function getStats(): Promise<AdminStats> {
   return adminFetch<AdminStats>("/admin/stats");
 }
 
-export async function listUrls(): Promise<AdminUrlsResponse> {
-  return adminFetch<AdminUrlsResponse>("/admin/urls");
+export async function listUrls(
+  options: ListUrlsOptions = {},
+): Promise<AdminUrlsResponse> {
+  const params = new URLSearchParams();
+  if (options.offset !== undefined) params.set("offset", String(options.offset));
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.type) params.set("type", options.type);
+  if (options.search) params.set("search", options.search);
+  const qs = params.toString();
+  const path = qs ? `/admin/urls?${qs}` : "/admin/urls";
+  return adminFetch<AdminUrlsResponse>(path);
 }
 
 export async function addUrl(url: string): Promise<IngestResult> {

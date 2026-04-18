@@ -1,10 +1,19 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import {
+  FormEvent,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FileText,
   Globe,
+  Layers,
   Loader2,
   Plus,
   RefreshCw,
@@ -23,39 +32,82 @@ import {
   reingestUrl,
 } from "@/lib/admin-api";
 import { DeleteUrlDialog } from "@/components/admin/delete-url-dialog";
+import { Pagination } from "@/components/admin/pagination";
 import { cn } from "@/lib/utils";
 
+const PAGE_SIZE = 10;
+const SEARCH_DEBOUNCE_MS = 350;
+
+type TypeFilter = "all" | "web" | "pdf";
+
+function parseTypeFilter(v: string | null): TypeFilter {
+  return v === "web" || v === "pdf" ? v : "all";
+}
+
 /**
- * URL yönetim sayfası.
+ * URL yönetim sayfası (paginated).
  *
- * Özellikler:
- *  - Qdrant'taki tüm URL'leri listele (chunk sayısı, tip ile birlikte)
- *  - Arama: URL veya title içinde case-insensitive filtre
- *  - Yeni URL ekle: inline form, ingest sırasında spinner
- *  - Satır başı aksiyonlar: reingest (force), delete (confirm dialog)
- *  - Toast ile başarı/hata bildirimi
- *  - 401/403 durumunda otomatik logout
+ * Veri akışı:
+ *  - URL'deki query params (page, type, q) tek source of truth
+ *  - Kullanıcı sayfa/filtre değiştirdiğinde router.replace ile URL güncellenir
+ *  - useEffect query params değişince backend'ten tek sayfa veri çeker
+ *  - Bu sayede geri/ileri butonları, linkler, sayfa yenileme hepsi tutarlı
+ *
+ * Backend sadece aktif sayfayı döner (10 URL), 1000+ URL olsa bile hızlı.
  */
-export default function AdminUrlsPage() {
+function AdminUrlsPageInner() {
   const t = useT();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const setAdminToken = useChatStore((s) => s.setAdminToken);
   const toast = useToast();
 
+  // URL'den okunan state
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const typeFilter = parseTypeFilter(searchParams.get("type"));
+  const searchQuery = searchParams.get("q") ?? "";
+
+  // Local search input (debounced)
+  const [searchInput, setSearchInput] = useState(searchQuery);
+
+  // Yüklenmiş sayfa verisi
   const [items, setItems] = useState<AdminUrlItem[]>([]);
-  const [loadingList, setLoadingList] = useState(true);
-  const [search, setSearch] = useState("");
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   // Yeni URL ekleme state'i
   const [newUrl, setNewUrl] = useState("");
   const [addingUrl, setAddingUrl] = useState(false);
 
-  // Per-row aksiyon state'leri (hangi URL üzerinde işlem sürüyor?)
+  // Per-row aksiyon state'i
   const [reingestingUrl, setReingestingUrl] = useState<string | null>(null);
 
-  // Silme dialog state'i
+  // Silme dialog
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // ---------- URL state yardımcıları ----------
+
+  const updateUrl = useCallback(
+    (patch: { page?: number; type?: TypeFilter; q?: string }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (patch.page !== undefined) {
+        if (patch.page <= 1) params.delete("page");
+        else params.set("page", String(patch.page));
+      }
+      if (patch.type !== undefined) {
+        if (patch.type === "all") params.delete("type");
+        else params.set("type", patch.type);
+      }
+      if (patch.q !== undefined) {
+        if (!patch.q) params.delete("q");
+        else params.set("q", patch.q);
+      }
+      const qs = params.toString();
+      router.replace(qs ? `/admin/urls?${qs}` : "/admin/urls");
+    },
+    [router, searchParams],
+  );
 
   // Auth hatası → logout + redirect
   const handleAuthError = useCallback(() => {
@@ -63,11 +115,26 @@ export default function AdminUrlsPage() {
     router.replace("/admin/login");
   }, [router, setAdminToken]);
 
+  // ---------- Veri çekme ----------
+
   const load = useCallback(async () => {
-    setLoadingList(true);
+    setLoading(true);
     try {
-      const data = await listUrls();
+      const data = await listUrls({
+        offset: (page - 1) * PAGE_SIZE,
+        limit: PAGE_SIZE,
+        type: typeFilter === "all" ? null : typeFilter,
+        search: searchQuery || undefined,
+      });
       setItems(data.urls);
+      setTotal(data.total);
+
+      // Aktif sayfa artık var olmayan sayfada ise (silme sonrası)
+      // son geçerli sayfaya atla
+      const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
+      if (page > totalPages) {
+        updateUrl({ page: totalPages });
+      }
     } catch (err) {
       if (err instanceof AdminAuthError) {
         handleAuthError();
@@ -79,24 +146,46 @@ export default function AdminUrlsPage() {
         description: err instanceof Error ? err.message : "",
       });
     } finally {
-      setLoadingList(false);
+      setLoading(false);
     }
-  }, [handleAuthError, t, toast]);
+  }, [
+    page,
+    typeFilter,
+    searchQuery,
+    handleAuthError,
+    t,
+    toast,
+    updateUrl,
+  ]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Filtrelenmiş liste — search her değiştiğinde yeniden hesaplanır
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (it) =>
-        it.url.toLowerCase().includes(q) ||
-        it.title.toLowerCase().includes(q),
-    );
-  }, [items, search]);
+  // Search input değişince debounce ile URL'i güncelle
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    // Input tam searchQuery ile eşitse bir şey yapma (URL'den geldi)
+    if (searchInput === searchQuery) return;
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      updateUrl({ q: searchInput, page: 1 });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchInput, searchQuery, updateUrl]);
+
+  // URL'den gelen search değiştiyse input'u sync et (browser back/forward)
+  useEffect(() => {
+    setSearchInput(searchQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    [total],
+  );
 
   // ---------- Handlers ----------
 
@@ -208,13 +297,26 @@ export default function AdminUrlsPage() {
 
   // ---------- Render ----------
 
+  const typeTabs: { value: TypeFilter; label: string; icon: typeof Layers }[] = [
+    { value: "all", label: "All", icon: Layers },
+    { value: "web", label: "Web", icon: Globe },
+    { value: "pdf", label: "PDF", icon: FileText },
+  ];
+
+  const titleForType =
+    typeFilter === "pdf"
+      ? t.adminStatsPdfUrls
+      : typeFilter === "web"
+        ? t.adminStatsWebUrls
+        : t.adminUrlListTitle;
+
   return (
     <div className="space-y-6">
       {/* Üst: başlık + açıklama + yenile */}
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {t.adminUrlListTitle}
+            {titleForType}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             {t.adminUrlListDescription}
@@ -224,10 +326,10 @@ export default function AdminUrlsPage() {
           variant="outline"
           size="sm"
           onClick={load}
-          disabled={loadingList}
+          disabled={loading}
           className="gap-1.5"
         >
-          {loadingList ? (
+          {loading ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
             <RefreshCw className="h-3.5 w-3.5" />
@@ -281,13 +383,36 @@ export default function AdminUrlsPage() {
         </form>
       </div>
 
+      {/* Type filter sekmeleri */}
+      <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-sm">
+        {typeTabs.map((tab) => {
+          const Icon = tab.icon;
+          const active = typeFilter === tab.value;
+          return (
+            <button
+              key={tab.value}
+              onClick={() => updateUrl({ type: tab.value, page: 1 })}
+              className={cn(
+                "inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Arama kutusu */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           placeholder={t.adminUrlSearchPlaceholder}
           className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
@@ -295,13 +420,13 @@ export default function AdminUrlsPage() {
 
       {/* URL listesi */}
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-        {loadingList && items.length === 0 ? (
+        {loading && items.length === 0 ? (
           <div className="flex items-center justify-center p-12">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">
-            {items.length === 0 ? t.adminUrlEmpty : t.adminUrlNoMatch}
+            {total === 0 && !searchQuery ? t.adminUrlEmpty : t.adminUrlNoMatch}
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -313,13 +438,16 @@ export default function AdminUrlsPage() {
               <div className="w-48 text-right">{t.adminUrlTableActions}</div>
             </div>
 
-            {filtered.map((item) => {
+            {items.map((item) => {
               const isPdf = item.doc_type === "pdf";
               const isBusy = reingestingUrl === item.url;
               return (
                 <div
                   key={item.url}
-                  className="px-4 py-3 transition-colors hover:bg-muted/20 md:grid md:grid-cols-[1fr_auto_auto_auto] md:items-center md:gap-4"
+                  className={cn(
+                    "px-4 py-3 transition-colors hover:bg-muted/20 md:grid md:grid-cols-[1fr_auto_auto_auto] md:items-center md:gap-4",
+                    loading && "opacity-50",
+                  )}
                 >
                   {/* URL + title */}
                   <div className="min-w-0 flex-1">
@@ -357,7 +485,7 @@ export default function AdminUrlsPage() {
                     </div>
                   </div>
 
-                  {/* Mobilde chunk/tip bilgisi satır altında */}
+                  {/* Mobilde chunk/tip bilgisi */}
                   <div className="mt-2 flex items-center gap-2 md:hidden">
                     <span
                       className={cn(
@@ -374,7 +502,7 @@ export default function AdminUrlsPage() {
                     </span>
                   </div>
 
-                  {/* Desktop: Tip rozeti */}
+                  {/* Desktop: Tip */}
                   <div className="hidden w-16 text-center md:block">
                     <span
                       className={cn(
@@ -433,14 +561,23 @@ export default function AdminUrlsPage() {
         )}
       </div>
 
-      {/* Liste sonu info */}
-      {!loadingList && filtered.length > 0 && (
-        <p className="text-center text-xs text-muted-foreground">
-          {filtered.length} / {items.length}
-        </p>
+      {/* Pagination + info */}
+      {total > 0 && (
+        <div className="flex flex-col items-center gap-2">
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            disabled={loading}
+            onPageChange={(p) => updateUrl({ page: p })}
+          />
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {(page - 1) * PAGE_SIZE + 1}–
+            {Math.min(page * PAGE_SIZE, total)} / {total}
+          </p>
+        </div>
       )}
 
-      {/* Silme onay dialog */}
+      {/* Silme dialog */}
       <DeleteUrlDialog
         open={deleteTarget !== null}
         url={deleteTarget}
@@ -449,5 +586,22 @@ export default function AdminUrlsPage() {
         onConfirm={handleDeleteConfirm}
       />
     </div>
+  );
+}
+
+/**
+ * useSearchParams() Suspense boundary gerektirir (Next.js 15+).
+ */
+export default function AdminUrlsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <AdminUrlsPageInner />
+    </Suspense>
   );
 }

@@ -65,24 +65,28 @@ export default function AdminDashboardPage() {
       value: stats?.total_chunks ?? 0,
       icon: Layers,
       color: "from-primary to-secondary",
+      href: null,
     },
     {
       label: t.adminStatsTotalUrls,
       value: stats?.total_urls ?? 0,
       icon: Database,
       color: "from-emerald-500 to-teal-600",
+      href: "/admin/urls",
     },
     {
       label: t.adminStatsWebUrls,
       value: stats?.web_urls ?? 0,
       icon: Globe,
       color: "from-blue-500 to-indigo-600",
+      href: "/admin/urls?type=web",
     },
     {
       label: t.adminStatsPdfUrls,
       value: stats?.pdf_urls ?? 0,
       icon: FileText,
       color: "from-orange-500 to-red-600",
+      href: "/admin/urls?type=pdf",
     },
   ];
 
@@ -118,11 +122,8 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => {
           const Icon = card.icon;
-          return (
-            <div
-              key={card.label}
-              className="rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
-            >
+          const cardContent = (
+            <>
               <div
                 className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${card.color} text-white shadow-sm`}
               >
@@ -138,6 +139,26 @@ export default function AdminDashboardPage() {
                   card.value.toLocaleString()
                 )}
               </p>
+            </>
+          );
+
+          return card.href ? (
+            <Link
+              key={card.label}
+              href={card.href}
+              className="group rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:border-primary/40 hover:shadow-md"
+            >
+              {cardContent}
+              <p className="mt-2 text-[11px] font-medium text-muted-foreground transition-colors group-hover:text-primary">
+                →
+              </p>
+            </Link>
+          ) : (
+            <div
+              key={card.label}
+              className="rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+            >
+              {cardContent}
             </div>
           );
         })}
