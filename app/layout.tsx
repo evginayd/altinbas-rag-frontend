@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { HtmlLangSync } from "@/components/html-lang-sync";
+import { ToastProvider } from "@/components/ui/toast";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -39,7 +40,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <HtmlLangSync />
-          {children}
+          <ToastProvider>{children}</ToastProvider>
         </ThemeProvider>
       </body>
     </html>

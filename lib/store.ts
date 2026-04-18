@@ -17,12 +17,16 @@ type ChatStore = {
   isLoading: boolean;
   error: string | null;
   language: Language;
+  // Admin panel token. Null ise kullanıcı giriş yapmamış.
+  // localStorage'da saklanır, sayfa yenilense de kalır.
+  adminToken: string | null;
 
   addMessage: (msg: Omit<Message, "id" | "timestamp">) => Message;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   clearMessages: () => void;
   setLanguage: (lang: Language) => void;
+  setAdminToken: (token: string | null) => void;
 };
 
 const createId = () =>
@@ -37,6 +41,7 @@ export const useChatStore = create<ChatStore>()(
       isLoading: false,
       error: null,
       language: "tr" as Language,
+      adminToken: null,
 
       addMessage: (msg) => {
         const fullMessage: Message = {
@@ -53,14 +58,16 @@ export const useChatStore = create<ChatStore>()(
 
       clearMessages: () => set({ messages: [], error: null, isLoading: false }),
       setLanguage: (lang) => set({ language: lang }),
+      setAdminToken: (token) => set({ adminToken: token }),
     }),
     {
       name: "altinbas-chat-store",
       storage: createJSONStorage(() => localStorage),
-      // messages + language persist edilir, isLoading/error oturum bağımlı
+      // messages + language + adminToken persist edilir; isLoading/error oturum bağımlı
       partialize: (state) => ({
         messages: state.messages,
         language: state.language,
+        adminToken: state.adminToken,
       }),
     },
   ),

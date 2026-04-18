@@ -1,10 +1,11 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ShieldCheck, Sparkles } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { LanguageToggle } from "./language-toggle";
 import { NewChatButton } from "./chat/new-chat-button";
-import { useT } from "@/lib/store";
+import { useChatStore, useT } from "@/lib/store";
 
 /**
  * Üst header.
@@ -12,6 +13,7 @@ import { useT } from "@/lib/store";
  */
 export function Header() {
   const t = useT();
+  const adminToken = useChatStore((s) => s.adminToken);
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
@@ -30,6 +32,16 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {adminToken && (
+            <Link
+              href="/admin"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+              title={t.adminTitle}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{t.adminTitle}</span>
+            </Link>
+          )}
           <NewChatButton />
           <LanguageToggle />
           <ThemeToggle />
