@@ -35,14 +35,17 @@ export function ChatContainer() {
   const handleSend = async (text: string) => {
     if (isLoading) return;
 
-    // 1. User mesajını ekle
+    // 1. User mesajını ekle. Bu snapshot'ı history olarak kullanacağız
+    // (yeni eklediğimiz user mesajını hariç tutmak için mevcut messages'ı
+    // gönderiyoruz, query zaten ayrı parametre)
+    const historyForApi = messages;
     addMessage({ role: "user", content: text });
     setLoading(true);
     setError(null);
 
     try {
-      // 2. Backend'e istek
-      const response = await chatApi(text);
+      // 2. Backend'e istek (history ile)
+      const response = await chatApi(text, historyForApi);
 
       // 3. Assistant mesajını ekle (animate flag için id'sini sakla)
       const newMsg = addMessage({
