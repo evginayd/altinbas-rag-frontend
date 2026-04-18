@@ -58,7 +58,8 @@ export async function chat(
   query: string,
   history: Message[] = [],
 ): Promise<ChatResponse> {
-  const t = translations[getLang()];
+  const language = getLang();
+  const t = translations[language];
   if (!API_URL) {
     throw new ApiError(t.errorApiUrl);
   }
@@ -75,7 +76,7 @@ export async function chat(
     response = await fetch(`${API_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, history: recentHistory }),
+      body: JSON.stringify({ query, history: recentHistory, language }),
     });
   } catch (err) {
     throw new ApiError(t.errorConnection);
