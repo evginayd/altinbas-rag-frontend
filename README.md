@@ -1,3 +1,7 @@
+![Chat interface](public/screenshots/01-chat.jpg)
+![Admin dashboard](public/screenshots/02-admin-dashboard.jpg)
+![Admin URL management](public/screenshots/03-admin-urls.jpg)
+
 # Altinbas AI Assistant — Frontend
 
 A modern chat interface for the Altinbas University RAG assistant.
